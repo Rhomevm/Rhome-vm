@@ -1,66 +1,3 @@
-require('dotenv').config();
-
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-
-const app = express();
-const PORT = process.env.PORT || 4000;
-
-const GUESTY_CLIENT_ID = process.env.GUESTY_CLIENT_ID;
-const GUESTY_CLIENT_SECRET = process.env.GUESTY_CLIENT_SECRET;
-
-// Simple in-memory token cache
-let tokenCache = {
-  accessToken: null,
-  expiresAt: 0
-};
-
-app.use(cors());
-app.use(express.json());
-
-/**
- * Get Guesty Booking Engine Access Token
- */
-async function getGuestyAccessToken() {
-  const now = Date.now();
-
-  if (tokenCache.accessToken && tokenCache.expiresAt > now) {
-    return tokenCache.accessToken;
-  }
-
-  const url = "https://booking.guesty.com/oauth2/token";
-
-  const params = new URLSearchParams();
-  params.append("grant_type", "client_credentials");
-  params.append("scope", "booking_engine:api");
-  params.append("client_id", GUESTY_CLIENT_ID);
-  params.append("client_secret", GUESTY_CLIENT_SECRET);
-
-  const response = await axios.post(url, params, {
-    headers: {
-      "accept": "application/json",
-      "cache-control": "no-cache,no-cache",
-      "content-type": "application/x-www-form-urlencoded"
-    }
-  });
-
-  const { access_token, expires_in } = response.data;
-
-  tokenCache.accessToken = access_token;
-  tokenCache.expiresAt = now + (expires_in - 60) * 1000;
-
-  return access_token;
-}
-
-// Health check
-app.get("/", (req, res) => {
-  res.json({ success: true, service: "RhomeVM Booking Backend" });
-});
-
-/**
- * Main booking endpoint
- */
 app.post("/api/book", async (req, res) => {
   try {
     const {
@@ -108,7 +45,37 @@ app.post("/api/book", async (req, res) => {
       });
     }
 
-    // 2) Convert quote → reservation
+    // 🔹 Pick a rate plan from the quote (first one)
+    const ratePlans = quote.rates && Array.isArray(quote.rates.ratePlans)
+      ? quote.rates.ratePlans
+      : [];
+
+    if (!ratePlans.length) {
+      return res.status(500).json({
+        success: false,
+        error: "No rate plans returned in quote.",
+        quote
+      });
+    }
+
+    const ratePlanId = ratePlans[0]._id || ratePlans[0].id;
+
+    // 🔹 Reservation payload for inquiry / instant
+    const reservationBody = {
+      ratePlanId,
+      guest: {
+        firstName: guest.firstName,
+        lastName: guest.lastName,
+        email: guest.email,
+        phone: guest.phone || ""
+      },
+      policy: {
+        accept: true
+      }
+      // ccToken can be added later if you do instant bookings with payments
+    };
+
+    // 2) Convert quote → reservation (inquiry or instant)
     let reservationUrl =
       mode === "instant"
         ? `https://booking.guesty.com/api/reservations/quotes/${quoteId}/instant`
@@ -116,7 +83,7 @@ app.post("/api/book", async (req, res) => {
 
     const reservationResponse = await axios.post(
       reservationUrl,
-      {},
+      reservationBody,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -141,8 +108,4 @@ app.post("/api/book", async (req, res) => {
       details: err.response?.data || err.message
     });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Booking backend listening on port ${PORT}`);
 });
