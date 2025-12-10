@@ -17,7 +17,7 @@ let tokenCache = {
 };
 
 const corsOptions = {
-  origin: '*', // can be restricted later
+  origin: '*', // you can restrict to your domain later
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
@@ -27,7 +27,7 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 
 /**
- * Get Guesty Booking Engine access token
+ * Get Guesty Booking Engine access token via client credentials.
  */
 async function getGuestyAccessToken() {
   const now = Date.now();
@@ -60,18 +60,18 @@ async function getGuestyAccessToken() {
   return access_token;
 }
 
-// Health check
+// Health check with new version tag so we KNOW it's live
 app.get('/', (req, res) => {
   res.json({
     success: true,
     service: 'RhomeVM Booking Backend',
-    version: 'v2-echo-test'
+    version: 'v3-quote-only'
   });
 });
 
 /**
- * TEMP: echo-only booking endpoint to verify deployment wiring.
- * Does NOT call Guesty yet.
+ * /api/book
+ * Creates a Guesty quote ONLY and returns it.
  */
 app.post('/api/book', async (req, res) => {
   try {
@@ -134,7 +134,6 @@ app.post('/api/book', async (req, res) => {
     });
   }
 });
-
 
 app.listen(PORT, () => {
   console.log(`Booking backend listening on port ${PORT}`);
