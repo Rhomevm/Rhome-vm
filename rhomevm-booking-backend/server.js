@@ -73,15 +73,68 @@ app.get('/', (req, res) => {
  * TEMP: echo-only booking endpoint to verify deployment wiring.
  * Does NOT call Guesty yet.
  */
-app.post('/api/book', (req, res) => {
-  console.log('Hit /api/book with body:', req.body);
+app.post('/api/book', async (req, res) => {
+  try {
+    const {
+      listingId,
+      checkInDateLocalized,
+      checkOutDateLocalized,
+      guestsCount,
+      guest
+      // mode ignored for now – we just create a quote
+    } = req.body;
 
-  return res.json({
-    success: true,
-    mode: 'echo-only-test',
-    received: req.body
-  });
+    if (!listingId || !checkInDateLocalized || !checkOutDateLocalized || !guestsCount || !guest) {
+      return res.status(400).json({ success: false, error: 'Missing required fields.' });
+    }
+
+    const token = await getGuestyAccessToken();
+
+    console.log('Creating Guesty quote with:', {
+      listingId,
+      checkInDateLocalized,
+      checkOutDateLocalized,
+      guestsCount,
+      guest
+    });
+
+    const quoteResponse = await axios.post(
+      'https://booking.guesty.com/api/reservations/quotes',
+      {
+        listingId,
+        checkInDateLocalized,
+        checkOutDateLocalized,
+        guestsCount,
+        guest
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json; charset=utf-8',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const quote = quoteResponse.data;
+
+    console.log('Guesty quote created:', quote);
+
+    return res.json({
+      success: true,
+      quote
+    });
+  } catch (err) {
+    console.error('Error in /api/book:', err.response?.data || err.message);
+
+    return res.status(500).json({
+      success: false,
+      error: 'Booking failed.',
+      details: err.response?.data || err.message
+    });
+  }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Booking backend listening on port ${PORT}`);
