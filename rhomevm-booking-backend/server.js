@@ -138,3 +138,39 @@ app.post('/api/book', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Booking backend listening on port ${PORT}`);
 });
+// Get availability calendar for a listing
+app.get('/api/availability/:listingId', async (req, res) => {
+  try {
+    const { listingId } = req.params;
+
+    if (!listingId) {
+      return res.status(400).json({ success: false, error: 'listingId is required' });
+    }
+
+    const token = await getGuestyAccessToken();
+
+    // You can add query params like ?start=2025-12-01&end=2025-12-31 if Guesty supports them
+    const guestyUrl = `https://booking.guesty.com/api/listings/${listingId}/calendar`;
+
+    const response = await axios.get(guestyUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json; charset=utf-8'
+      }
+    });
+
+    return res.json({
+      success: true,
+      listingId,
+      calendar: response.data
+    });
+  } catch (err) {
+    console.error('Error in /api/availability:', err.response?.data || err.message);
+
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch availability.',
+      details: err.response?.data || err.message
+    });
+  }
+});
